@@ -1,4 +1,4 @@
-##用Android Studio导入并运行DL注意事项
+## 用Android Studio导入并运行DL注意事项
 
 ###1.请用Android studio 1.0以上版本
 ###2.根目录下的脚本是无法运行的，请运行对应子项目

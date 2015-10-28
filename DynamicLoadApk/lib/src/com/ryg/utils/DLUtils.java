@@ -37,6 +37,12 @@ import java.io.IOException;
 public class DLUtils {
     private static final String TAG = "DLUtils";
 
+    /**
+     * 获取package信息，这里只获取activity和service
+     * @param context 上下文
+     * @param apkFilepath apk文件路径
+     * @return
+     */
     public static PackageInfo getPackageInfo(Context context, String apkFilepath) {
         PackageManager pm = context.getPackageManager();
         PackageInfo pkgInfo = null;
