@@ -41,6 +41,11 @@ public class DLIntent extends Intent {
         this.mPluginPackage = pluginPackage;
     }
 
+    /**
+     *
+     * @param pluginPackage
+     * @param pluginClass
+     */
     public DLIntent(String pluginPackage, String pluginClass) {
         super();
         this.mPluginPackage = pluginPackage;

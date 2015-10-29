@@ -4,14 +4,10 @@ import java.io.File;
 import java.util.ArrayList;
 
 import android.app.Activity;
-import android.content.ComponentName;
-import android.content.Context;
 import android.content.ServiceConnection;
 import android.content.pm.PackageInfo;
 import android.os.Bundle;
 import android.os.Environment;
-import android.os.IBinder;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -26,7 +22,6 @@ import android.widget.TextView;
 
 import com.ryg.dynamicload.internal.DLIntent;
 import com.ryg.dynamicload.internal.DLPluginManager;
-import com.ryg.dynamicload.service.ITestServiceInterface;
 import com.ryg.utils.DLUtils;
 
 public class MainActivity extends Activity implements OnItemClickListener {
@@ -51,35 +46,48 @@ public class MainActivity extends Activity implements OnItemClickListener {
         initData();
     }
 
+    /**
+     * 界面初始化
+     */
     private void initView() {
-        mPluginAdapter = new PluginAdapter();
+        mPluginAdapter = new PluginAdapter(this);
         mListView = (ListView) findViewById(R.id.plugin_list);
         mNoPluginTextView = (TextView)findViewById(R.id.no_plugin);
     }
 
+    /**
+     * 数据初始化
+     */
     private void initData() {
         String pluginFolder = Environment.getExternalStorageDirectory() + "/DynamicLoadHost";
         File file = new File(pluginFolder);
         File[] plugins = file.listFiles();
+
+        // 没有plugin处理
         if (plugins == null || plugins.length == 0) {
             mNoPluginTextView.setVisibility(View.VISIBLE);
             return;
         }
 
+        // 有plugin处理
         for (File plugin : plugins) {
             PluginItem item = new PluginItem();
-            item.pluginPath = plugin.getAbsolutePath();
-            item.packageInfo = DLUtils.getPackageInfo(this, item.pluginPath);
-            if (item.packageInfo.activities != null && item.packageInfo.activities.length > 0) {
-                item.launcherActivityName = item.packageInfo.activities[0].name;
+            item.setPluginPath(plugin.getAbsolutePath());
+            item.setPackageInfo(DLUtils.getPackageInfo(this, item.getPluginPath()));
+            if (item.getPackageInfo().activities != null && item.getPackageInfo().activities.length > 0) {
+                // 设置Main Activity
+                // 感觉这种方法会更准一点：http://stackoverflow.com/questions/13027374/get-the-launcher-activity-name-of-an-android-application
+                item.setLauncherActivityName(item.getPackageInfo().activities[0].name);
             }
-            if (item.packageInfo.services != null && item.packageInfo.services.length > 0) {
-                item.launcherServiceName = item.packageInfo.services[0].name;
+            if (item.getPackageInfo().services != null && item.getPackageInfo().services.length > 0) {
+                item.setLauncherServiceName(item.getPackageInfo().services[0].name);
             }
             mPluginItems.add(item);
-            DLPluginManager.getInstance(this).loadApk(item.pluginPath);
+            DLPluginManager.getInstance(this).loadApk(item.getPluginPath());
         }
+        mPluginAdapter.setData(mPluginItems);
 
+        // 给listview设置adapter
         mListView.setAdapter(mPluginAdapter);
         mListView.setOnItemClickListener(this);
         mPluginAdapter.notifyDataSetChanged();
@@ -105,82 +113,17 @@ public class MainActivity extends Activity implements OnItemClickListener {
         return super.onOptionsItemSelected(item);
     }
 
-    private class PluginAdapter extends BaseAdapter {
-
-        private LayoutInflater mInflater;
-
-        public PluginAdapter() {
-            mInflater = MainActivity.this.getLayoutInflater();
-        }
-
-        @Override
-        public int getCount() {
-            return mPluginItems.size();
-        }
-
-        @Override
-        public Object getItem(int position) {
-            return mPluginItems.get(position);
-        }
-
-        @Override
-        public long getItemId(int position) {
-            return position;
-        }
-
-        @Override
-        public View getView(int position, View convertView, ViewGroup parent) {
-            ViewHolder holder;
-            if (convertView == null) {
-                convertView = mInflater.inflate(R.layout.plugin_item, parent, false);
-                holder = new ViewHolder();
-                holder.appIcon = (ImageView) convertView.findViewById(R.id.app_icon);
-                holder.appName = (TextView) convertView.findViewById(R.id.app_name);
-                holder.apkName = (TextView) convertView.findViewById(R.id.apk_name);
-                holder.packageName = (TextView) convertView.findViewById(R.id.package_name);
-                convertView.setTag(holder);
-            } else {
-                holder = (ViewHolder) convertView.getTag();
-            }
-            PluginItem item = mPluginItems.get(position);
-            PackageInfo packageInfo = item.packageInfo;
-            holder.appIcon.setImageDrawable(DLUtils.getAppIcon(MainActivity.this, item.pluginPath));
-            holder.appName.setText(DLUtils.getAppLabel(MainActivity.this, item.pluginPath));
-            holder.apkName.setText(item.pluginPath.substring(item.pluginPath.lastIndexOf(File.separatorChar) + 1));
-            holder.packageName.setText(packageInfo.applicationInfo.packageName + "\n" + 
-                                       item.launcherActivityName + "\n" + 
-                                       item.launcherServiceName);
-            return convertView;
-        }
-    }
-
-    private static class ViewHolder {
-        public ImageView appIcon;
-        public TextView appName;
-        public TextView apkName;
-        public TextView packageName;
-    }
-
-    public static class PluginItem {
-        public PackageInfo packageInfo;
-        public String pluginPath;
-        public String launcherActivityName;
-        public String launcherServiceName;
-
-        public PluginItem() {
-        }
-    }
-
     @Override
     public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
         PluginItem item = mPluginItems.get(position);
         DLPluginManager pluginManager = DLPluginManager.getInstance(this);
-        pluginManager.startPluginActivity(this, new DLIntent(item.packageInfo.packageName, item.launcherActivityName));
+        // 启动选中Plugin的Launcher Activity
+        pluginManager.startPluginActivity(this, new DLIntent(item.getPackageInfo().packageName, item.getLauncherActivityName()));
         
         //如果存在Service则调用起Service
-        if (item.launcherServiceName != null) { 
+        if (item.getLauncherServiceName() != null) {
             //startService
-	        DLIntent intent = new DLIntent(item.packageInfo.packageName, item.launcherServiceName);
+	        DLIntent intent = new DLIntent(item.getPackageInfo().packageName, item.getLauncherServiceName());
 	        //startService
 //	        pluginManager.startPluginService(this, intent); 
 	        

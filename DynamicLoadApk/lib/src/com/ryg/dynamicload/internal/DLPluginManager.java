@@ -76,10 +76,16 @@ public class DLPluginManager {
 
     private static DLPluginManager sInstance;
     private Context mContext;
+    /**
+     * key 为包名，value 为表示插件信息的DLPluginPackage，存储已经加载过的插件信息
+     */
     private final HashMap<String, DLPluginPackage> mPackagesHolder = new HashMap<String, DLPluginPackage>();
 
     private int mFrom = DLConstants.FROM_INTERNAL;
 
+    /**
+     * 为插件 Native Library 拷贝到宿主中后的存放目录路径
+     */
     private String mNativeLibDir = null;
 
     private int mResult;
@@ -102,8 +108,8 @@ public class DLPluginManager {
     }
 
     /**
-     * Load a apk. Before start a plugin Activity, we should do this first.<br/>
-     * NOTE : will only be called by host apk.
+     * 加载apk。需要在第一次启动plugin的activity前执行这个方法.<br/>
+     * NOTE : 必须是由宿主程序来调用.
      * 
      * @param dexPath
      */
@@ -114,10 +120,11 @@ public class DLPluginManager {
     }
 
     /**
+     * 载插件 Apk
      * @param dexPath
-     *            plugin path
+     *            plugin path 参数 dexPath 为插件的文件路径
      * @param hasSoLib
-     *            whether exist so lib in plugin
+     *            hasSoLib 表示插件是否含有 so 库
      * @return
      */
     public DLPluginPackage loadApk(final String dexPath, boolean hasSoLib) {
@@ -138,7 +145,7 @@ public class DLPluginManager {
     }
 
     /**
-     * prepare plugin runtime env, has DexClassLoader, Resources, and so on.
+     * 加载插件及其资源, has DexClassLoader, Resources, and so on.
      * 
      * @param packageInfo
      * @param dexPath
@@ -150,6 +157,8 @@ public class DLPluginManager {
         if (pluginPackage != null) {
             return pluginPackage;
         }
+
+        //调用createDexClassLoader(…)、createAssetManager(…)、createResources(…)函数完成相应初始化部分
         DexClassLoader dexClassLoader = createDexClassLoader(dexPath);
         AssetManager assetManager = createAssetManager(dexPath);
         Resources resources = createResources(assetManager);
@@ -161,6 +170,11 @@ public class DLPluginManager {
 
     private String dexOutputPath;
 
+    /**
+     * 利用DexClassLoader加载插件
+     * @param dexPath 插件的路径
+     * @return
+     */
     private DexClassLoader createDexClassLoader(String dexPath) {
         File dexOutputDir = mContext.getDir("dex", Context.MODE_PRIVATE);
         dexOutputPath = dexOutputDir.getAbsolutePath();
@@ -168,6 +182,14 @@ public class DLPluginManager {
         return loader;
     }
 
+    /**
+     * <font color="green">创建 AssetManager，加载插件资源</font> <br/>
+     * 在 Android 中，资源是通过 R.java 中的 id 来调用访问的。但是实现插件化之后，宿主是无法通过 R 文件访问插件的资源，
+     * 所以这里使用反射来生成属于插件的AssetManager，并利用addAssetPath函数加载插件资源。<br/>
+     * <font color="red">AssetManager 的无参构造函数以及addAssetPath函数都被hide了，通过反射调用</font>
+     * @param dexPath
+     * @return
+     */
     private AssetManager createAssetManager(String dexPath) {
         try {
             AssetManager assetManager = AssetManager.class.newInstance();
@@ -185,6 +207,12 @@ public class DLPluginManager {
         return mPackagesHolder.get(packageName);
     }
 
+    /**
+     *  <font color="green">利用<strong>AssetManager中已经加载的资源创建Resources</strong>，代理组件中会从这个Resources中读取资源。</font> <br/>
+     *
+     * @param assetManager
+     * @return
+     */
     private Resources createResources(AssetManager assetManager) {
         Resources superRes = mContext.getResources();
         Resources resources = new Resources(assetManager, superRes.getDisplayMetrics(), superRes.getConfiguration());
