@@ -81,6 +81,9 @@ public class DLPluginManager {
      */
     private final HashMap<String, DLPluginPackage> mPackagesHolder = new HashMap<String, DLPluginPackage>();
 
+    /**
+     * 默认是FROM_INTERNAL（从内部启动），如果执行了loadApk方法就会被赋值为FROM_EXTERNAL（从外部启动，也就插件）
+     */
     private int mFrom = DLConstants.FROM_INTERNAL;
 
     /**
@@ -220,10 +223,9 @@ public class DLPluginManager {
     }
 
     /**
-     * copy .so file to pluginlib dir.
+     * 调用SoLibManager拷贝 so 库到 Native Library 目录.
      * 
      * @param dexPath
-     * @param hasSoLib
      */
     private void copySoLib(String dexPath) {
         // TODO: copy so lib async will lead to bugs maybe, waiting for
@@ -238,13 +240,15 @@ public class DLPluginManager {
     }
 
     /**
-     * {@link #startPluginActivityForResult(Activity, DLIntent, int)}
+     * <font color="green"><strong>启动插件 Activity，会直接调用startPluginActivityForResult(…)函数</strong></font> <br/>
+     * 插件自己内部 Activity 启动依然是调用Context#startActivity(…)方法。
      */
     public int startPluginActivity(Context context, DLIntent dlIntent) {
         return startPluginActivityForResult(context, dlIntent, -1);
     }
 
     /**
+     * 启动插件 Activity
      * @param context
      * @param dlIntent
      * @param requestCode
@@ -254,12 +258,14 @@ public class DLPluginManager {
      */
     @TargetApi(Build.VERSION_CODES.ICE_CREAM_SANDWICH)
     public int startPluginActivityForResult(Context context, DLIntent dlIntent, int requestCode) {
+        // 1. 判断是否为插件中的activity，否则直接启动
         if (mFrom == DLConstants.FROM_INTERNAL) {
             dlIntent.setClassName(context, dlIntent.getPluginClass());
             performStartActivityForResult(context, dlIntent, requestCode);
             return DLPluginManager.START_RESULT_SUCCESS;
         }
 
+        // 2. 根据packageName从mPackagesHolder得到插件信息
         String packageName = dlIntent.getPluginPackage();
         if (TextUtils.isEmpty(packageName)) {
             throw new NullPointerException("disallow null packageName.");
@@ -270,20 +276,20 @@ public class DLPluginManager {
             return START_RESULT_NO_PKG;
         }
 
+        // 3. 得到待启动activity全路径，并用插件ClassLoader加载该类
         final String className = getPluginActivityFullPath(dlIntent, pluginPackage);
         Class<?> clazz = loadPluginClass(pluginPackage.classLoader, className);
         if (clazz == null) {
             return START_RESULT_NO_CLASS;
         }
 
-        // get the proxy activity class, the proxy activity will launch the
-        // plugin activity.
+        // 根据类名获取要启动的代理activity
         Class<? extends Activity> activityClass = getProxyActivityClass(clazz);
         if (activityClass == null) {
             return START_RESULT_TYPE_ERROR;
         }
 
-        // put extra data
+        // 设置intent参数用原生方式启动代理activity，添加额外参数告诉代理activity初始化哪个插件activity
         dlIntent.putExtra(DLConstants.EXTRA_CLASS, className);
         dlIntent.putExtra(DLConstants.EXTRA_PACKAGE, packageName);
         dlIntent.setClass(mContext, activityClass);
@@ -419,6 +425,13 @@ public class DLPluginManager {
     }
 
     // zhangjie1980 重命名 loadPluginActivityClass -> loadPluginClass
+
+    /**
+     * 用指定的ClassLoader加载指定的类
+     * @param classLoader
+     * @param className
+     * @return
+     */
     private Class<?> loadPluginClass(ClassLoader classLoader, String className) {
         Class<?> clazz = null;
         try {
@@ -430,6 +443,12 @@ public class DLPluginManager {
         return clazz;
     }
 
+    /**
+     * 由于清单文件中activity的name的写法存在 .xxxActivity 的写法，这个方法是为了补全这种情况下类全称
+     * @param dlIntent
+     * @param pluginPackage
+     * @return
+     */
     private String getPluginActivityFullPath(DLIntent dlIntent, DLPluginPackage pluginPackage) {
         String className = dlIntent.getPluginClass();
         className = (className == null ? pluginPackage.defaultActivity : className);
@@ -441,14 +460,15 @@ public class DLPluginManager {
 
     /**
      * get the proxy activity class, the proxy activity will delegate the plugin
-     * activity
-     * 
+     * activity <br/>
+     * <font>获取代理activity类，这个代理activity将作为插件activity的委派代表</font>
      * @param clazz
      *            target activity's class
      * @return
      */
     private Class<? extends Activity> getProxyActivityClass(Class<?> clazz) {
         Class<? extends Activity> activityClass = null;
+        // 判断插件里面的activity是继承自DLBasePluginActivity，还是DLBasePluginFragmentActivity
         if (DLBasePluginActivity.class.isAssignableFrom(clazz)) {
             activityClass = DLProxyActivity.class;
         } else if (DLBasePluginFragmentActivity.class.isAssignableFrom(clazz)) {

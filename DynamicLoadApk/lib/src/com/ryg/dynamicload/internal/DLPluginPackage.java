@@ -31,16 +31,34 @@ import dalvik.system.DexClassLoader;
  * @author siyu.song
  */
 public class DLPluginPackage {
-
+    /**
+     * 为插件的包名
+     */
     public String packageName;
+    /**
+     * 为插件的 Launcher Main Activity
+     */
     public String defaultActivity;
+    /**
+     * 为加载插件的 ClassLoader
+     */
     public DexClassLoader classLoader;
+    /**
+     * 为加载插件资源的 AssetManager
+     */
     public AssetManager assetManager;
+    /**
+     * 利用assetManager中已经加载的资源创建的Resources，代理组件中会从这个Resources中读取资源
+     */
     public Resources resources;
+    /**
+     * 被PackageManager解析后的插件信息
+     */
     public PackageInfo packageInfo;
 
     public DLPluginPackage(DexClassLoader loader, Resources resources,
             PackageInfo packageInfo) {
+
         this.packageName = packageInfo.packageName;
         this.classLoader = loader;
         this.assetManager = resources.getAssets();
